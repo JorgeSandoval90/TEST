@@ -1,37 +1,54 @@
-
-import pigpio
-import time
 import RPi.GPIO as GPIO
+import time
+import spidev
 
+# Set up GPIO pins
 GPIO.setmode(GPIO.BCM)
-GPIO.setwarnings(False)
+GPIO.setup(18, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+GPIO.setup(23, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
+# Set up event detection for both channels
+GPIO.add_event_detect(18, GPIO.BOTH, bouncetime=2)
+GPIO.add_event_detect(23, GPIO.BOTH, bouncetime=2)
 
-GPIO.setup(18, GPIO.OUT)
-GPIO.setup(25, GPIO.IN) #THIS WILL BE ROTARY ENCODER CLK 
-GPIO.setup(24, GPIO.IN) #THIS WILL BE ROTARY ENCODER DT
-GPIO.setup(23, GPIO.IN) #THIS WILL BE ROTARY ENCODER PRESS
-
-count = 0
-
+resistance = 0
+prev_time = time.time()
+#def rotary_callback(channel):
 while True:
-    if GPIO.input(25) == 0:
-        time.sleep(0.5) #This should account for debounce may want to increase debounce time
-        count += 1
-    if count%2 != 0:
-        GPIO.output(18, GPIO.HIGH)
-        #add anything you want to do after the button on the encoder is pressed
-    else:
-        GPIO.output(18, GPIO.LOW)
-        
-    
-        # Should not need this if the button is not pressed // time.sleep(0.5) #This should account for debounce
+    current_time = time.time()
+    global prev_state
+    prev_state_clk = GPIO.input(18)
+    if prev_state != GPIO.input(18):
+        if GPIO.input(18) == 0:
+            if GPIO.input(23) == 0:
+                speed = current_time - prev_time
+                print(speed)
+                if speed < 0.02:
+                    resistance -= 100
+                else:
+                    resistance -= 1
+                direction = "anti clockwise"
+                print(f"Direction: {direction}, Resistance: {resistance}" )
+            else:
+                speed = current_time - prev_time
+                print(speed)
+                if speed < 0.02:
+                    resistance += 100
+                else:
+                    resistance += 1
+                direction = "clockwise"
+                print(f"Direction: {direction}, Resistance: {resistance}")
+        prev_state = GPIO.input(18)
+        prev_time = current_time
+    #time.sleep
 
 
-GPIO.cleanup()
+
+# Add the callback function for both channels
+#GPIO.add_event_callback(18, rotary_callback)
+#GPIO.add_event_callback(23, rotary_callback)
 
 
-
-
-
-
+# Keep the program running
+#while True:
+#    time.sleep

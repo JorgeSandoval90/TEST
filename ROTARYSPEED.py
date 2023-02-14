@@ -1,20 +1,31 @@
 import sys
-sys.path.append('../')
+sys.path.append('/usr/local/lib/python3.7/dist-packages')
 import rgb1602
 import RPi.GPIO as GPIO
 import time
 
+import pigpio 
+pi1 = pigpio.pi()
 
 
-clk = 18
-dt = 23
-sw = 24
-cs = 4 #chip select pin
+
+
+
+# Potentiometer Setup
+pi = pigpio.pi()
+h = pi1.spi_open(0,97600)
+
+class encoder:
+    clk = 18
+    dt = 23
+    sw = 24
 # Set up GPIO pins
 GPIO.setmode(GPIO.BCM)
-GPIO.setup(clk, GPIO.IN, pull_up_down=GPIO.PUD_UP) #clk
-GPIO.setup(dt, GPIO.IN, pull_up_down=GPIO.PUD_UP) #dt
-GPIO.setup(sw, GPIO.IN, pull_up_down=GPIO.PUD_UP) #sw
+GPIO.setup(encoder.clk, GPIO.IN, pull_up_down=GPIO.PUD_UP) #clk
+GPIO.setup(encoder.dt, GPIO.IN, pull_up_down=GPIO.PUD_UP) #dt
+GPIO.setup(encoder.sw, GPIO.IN, pull_up_down=GPIO.PUD_UP) #sw
+
+
 #initalizing variables
 previousValue = 1
 resistance = 0
@@ -22,16 +33,16 @@ lcd=rgb1602.RGB1602(16,2)
 pot_num = 0
 potIs = 0
 prev_time = time.time()
-
+whole_bi = bin(0)
 #this function is when you are actively selecting the value you want to upload to the potentiometer
 def rotary_active():
     global previousValue
     global resistance
     global prev_time
     current_time = time.time()
-    if previousValue != GPIO.input(clk):            #this is to poll the rotary encoder to check if anything is changed so it is not always running through the code.
-        if GPIO.input(clk) == 0:                    #if clk is open prior to dt than you know the knob is being spun anti clockwise and can update values accordingly
-            if GPIO.input(dt) == 0:
+    if previousValue != GPIO.input(encoder.clk):            #this is to poll the rotary encoder to check if anything is changed so it is not always running through the code.
+        if GPIO.input(encoder.clk) == 0:                    #if encoder.clk is open prior to dt than you know the knob is being spun anti clockwise and can update values accordingly
+            if GPIO.input(encoder.dt) == 0:
                 direction = "anti-clockwise"
                 speed = current_time - prev_time
                 if speed < .2:                      #speed is to test how fast the knob is spinning this is just recorded from current time to last time the knob was spun
@@ -43,7 +54,7 @@ def rotary_active():
                     resistance -= 10
                 else:
                     resistance = 100
-                print(f"Direction: {direction}, Resistance: {resistance}, Speed: {speed}")      #this shows what direction the user spun the knob the new resistance value and how fast the spin was this if for debugging
+                print(f' Direction: {direction}, Resistance: {resistance}, Speed: {speed} ')      #this shows what direction the user spun the knob the new resistance value and how fast the spin was this if for debugging
                 lcd.clear()
                 lcd.setCursor(0, 0)                     #cursor requires a row and column number for the display this just says start from top right
                 lcd.printout(f"Select with knob")       #print to display
@@ -71,7 +82,7 @@ def rotary_active():
                 lcd.printout(f"{resistance} ohms")
                 time.sleep(.1)
                 prev_time = current_time                
-        previousValue = GPIO.input(clk)                 #update previous value for polling so you can retest if something has changed
+        previousValue = GPIO.input(encoder.clk)                 #update previous value for polling so you can retest if something has changed
 
 #this function is for the user to select which potentiometer they would like to be updating the values for
 def pot_select():
@@ -79,8 +90,8 @@ def pot_select():
     global pot_num
     global potIs
     global count
-    if previousValue != GPIO.input(clk):                            #same polling method as above 
-        if (GPIO.input(clk) == 0) or (GPIO.input(dt) == 0):         #becasue there is only two options no need to determine direction, we can just say switch to other pot
+    if previousValue != GPIO.input(encoder.clk):                            #same polling method as above 
+        if (GPIO.input(encoder.clk) == 0) or (GPIO.input(encoder.dt) == 0):         #becasue there is only two options no need to determine direction, we can just say switch to other pot
             if pot_num == 0:
                 pot_num = 1
             elif pot_num == 1:
@@ -95,7 +106,7 @@ def pot_select():
                 lcd.setCursor(3,1)                              #Points to the second option in the display which is pot P1
                 lcd.blink()                                     #this is for showing the user what pot they are going to choose
             time.sleep(.1)
-    if GPIO.input(sw) == 0:                                     #checks if user has selected pot by clicking the rotary encoder
+    if GPIO.input(encoder.sw) == 0:                                     #checks if user has selected pot by clicking the rotary encoder
         print(f"Final selected pot is: {pot_num}")              #prints to console for debugging
         lcd.clear()                                             #dispaly clear
         lcd.setCursor(0, 0)                                     
@@ -105,7 +116,16 @@ def pot_select():
         potIs = 1
         count = 1
         time.sleep(.5)                                          #delay for debounce
-    previousValue = GPIO.input(clk)                             #polling again
+    previousValue = GPIO.input(encoder.clk)                             #polling again
+
+def set_resistance():
+    global pot_num
+    global resistance
+    step = int(((128*resistance)/10000))-1
+    if pot_num == 1:
+        pi1.spi_write(h, [0b00000000,step])
+    else:
+        pi1.spi_write(h, [0b00010000,step])
 
 
 while True:
@@ -127,7 +147,7 @@ while True:
     while count == 1:
         rotary_active()                                         #calls function rotary_active
         prev_time2 = time.time()
-        while GPIO.input(sw) == 0:
+        while GPIO.input(encoder.sw) == 0:
             if (prev_time2 - time.time()) < -3:
                 print(f"Exited")
                 time.sleep(1)
@@ -138,10 +158,14 @@ while True:
                 print(f"Selected resistance is : {resistance}, This resistance is being applied to : {pot_num}")
                 lcd.clear()
                 lcd.setCursor(0, 0)
-                lcd.printout(f"Resistance on: {pot_num}")
+                #lcd.printout(f"Resistance on: {pot_num}")
+                if pot_num == 1:
+                    lcd.printout(f"Resistance on:P0")
+                elif pot_num == 2:
+                    lcd.printout(f"Resistance on:P1")
                 lcd.setCursor(0, 1)
                 lcd.printout(f"{resistance} ohms")
-                #insert resistance and upload it to the pot #
+                set_resistance()
                 time.sleep(3)
       
      
